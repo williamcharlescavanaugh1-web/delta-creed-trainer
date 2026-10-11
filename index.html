@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Delta Creed Trainer</title>
+<style>
+  :root {
+    --bg: #f6f3fa; --card: #ffffff; --text: #1d1530; --muted: #6b6280;
+    --purple: #4b2e83; --gold: #c99a1e; --good: #1f8a4c; --bad: #c62839; --border: #ddd5ea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #150e24; --card: #211635; --text: #f1ecfa; --muted: #a79bc0;
+            --purple: #8a64d6; --gold: #e0b13a; --good: #4cc983; --bad: #ff6b7b; --border: #3a2c57; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 17px/1.55 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { margin: 0 0 4px; font-size: 1.6rem; color: var(--purple); }
+  h1 small { font-size: .9rem; font-weight: 500; color: var(--muted); margin-left: 8px; white-space: nowrap; }
+  .sub { margin: 0 0 20px; color: var(--muted); }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .tabs button { flex: 1 1 auto; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border);
+                 background: var(--card); color: var(--text); font: inherit; cursor: pointer; }
+  .tabs button[aria-pressed="true"] { background: var(--purple); border-color: var(--purple); color: #fff; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+  .bar { height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; margin-bottom: 12px; }
+  .bar > div { height: 100%; width: 0; background: var(--gold); transition: width .15s; }
+  textarea { width: 100%; min-height: 200px; resize: vertical; padding: 12px; border-radius: 10px;
+             border: 2px solid var(--border); background: var(--bg); color: var(--text); font: inherit; }
+  textarea:focus { outline: none; border-color: var(--purple); }
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  .row .grow { flex: 1; color: var(--muted); font-size: .9rem; }
+  button.action { padding: 10px 18px; border-radius: 10px; border: 0; background: var(--purple); color: #fff;
+                  font: inherit; font-weight: 600; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--purple); border: 1px solid var(--purple); }
+  .result { display: none; margin-top: 16px; }
+  .result.show { display: block; }
+  .msg { font-weight: 700; margin: 0 0 10px; }
+  .msg.bad { color: var(--bad); } .msg.good { color: var(--good); }
+  .creed p { margin: 0 0 12px; }
+  .w.ok { color: var(--good); }
+  .w.err { color: #fff; background: var(--bad); border-radius: 4px; padding: 0 4px; font-weight: 700; }
+  .w.rest { color: var(--muted); }
+  .typed { font-size: .9rem; color: var(--muted); margin: -4px 0 12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Delta Creed Trainer <small>Made by Cavanaugh</small></h1>
+  <p class="sub">Type the creed from memory. One wrong word and it resets, so know it cold.</p>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div class="card">
+    <div class="bar"><div id="progress"></div></div>
+    <textarea id="input" placeholder="Start typing from memory…" autocomplete="off" autocorrect="off"
+              autocapitalize="off" spellcheck="false"></textarea>
+    <div class="row">
+      <span class="grow" id="stats"></span>
+      <button class="action ghost" id="giveup">Give up</button>
+    </div>
+
+    <div class="result" id="result" aria-live="polite">
+      <p class="msg" id="msg"></p>
+      <div class="creed" id="creed"></div>
+      <button class="action" id="reset">Reset</button>
+    </div>
+  </div>
+</main>
+
+<script>
+const PARTS = [
+  "I BELIEVE in Delta Tau Delta for the education of youth and the inspiration of maturity so that I may better learn and live the truth.",
+  "I BELIEVE in Delta Tau Delta as a shrine of international brotherhood: her cornerstone friendship, her foundation conscience, her columns aspiration, her girders self-restraint, her doorway opportunity, her windows understanding, her buttresses loyalty, her strength the everlasting arms.",
+  "I BELIEVE in Delta Tau Delta as an abiding influence to help me do my work, fulfill my obligations, maintain my self-respect, and bring about that happy life wherein I may more truly love my fellow men, serve my country, and obey my God."
+];
+const LABELS = ["Part 1", "Part 2", "Part 3", "All three"];
+
+const $ = id => document.getElementById(id);
+const input = $("input"), result = $("result");
+let mode = 0, locked = false, saved = {};
+
+try { saved = JSON.parse(localStorage.getItem("creedStats") || "{}"); } catch (e) {}
+const save = () => { try { localStorage.setItem("creedStats", JSON.stringify(saved)); } catch (e) {} };
+
+const norm = w => w.toLowerCase().replace(/[’‘]/g, "'").replace(/[^a-z0-9']/g, "");
+const split = t => t.split(/\s+/).filter(w => norm(w));
+const paragraphs = () => mode === 3 ? PARTS : [PARTS[mode]];
+const expected = () => split(paragraphs().join(" "));
+
+function buildTabs() {
+  $("tabs").innerHTML = "";
+  LABELS.forEach((l, i) => {
+    const b = document.createElement("button");
+    b.textContent = l;
+    b.setAttribute("aria-pressed", i === mode);
+    b.onclick = () => { mode = i; buildTabs(); reset(); };
+    $("tabs").appendChild(b);
+  });
+}
+
+function showStats() {
+  const s = saved[mode] || { best: 0, done: 0 };
+  $("stats").textContent = `Best: ${s.best}/${expected().length} words · Perfect runs: ${s.done}`;
+}
+
+function record(count, done) {
+  const s = saved[mode] || { best: 0, done: 0 };
+  s.best = Math.max(s.best, count);
+  if (done) s.done++;
+  saved[mode] = s; save(); showStats();
+}
+
+function render(failIdx, typedWord) {
+  let i = 0;
+  $("creed").innerHTML = "";
+  paragraphs().forEach(p => {
+    const el = document.createElement("p");
+    p.split(/\s+/).forEach(word => {
+      const span = document.createElement("span");
+      span.textContent = word + " ";
+      if (!norm(word)) { el.appendChild(span); return; }
+      span.className = "w " + (failIdx < 0 || i < failIdx ? "ok" : i === failIdx ? "err" : "rest");
+      i++;
+      el.appendChild(span);
+    });
+    $("creed").appendChild(el);
+  });
+  if (failIdx >= 0 && typedWord) {
+    const t = document.createElement("p");
+    t.className = "typed";
+    t.textContent = `You typed “${typedWord}” for word ${failIdx + 1}.`;
+    $("creed").insertBefore(t, $("creed").firstChild);
+  }
+}
+
+function finish(failIdx, typedWord) {
+  locked = true;
+  input.disabled = true;
+  const n = failIdx < 0 ? expected().length : failIdx;
+  record(n, failIdx < 0);
+  $("msg").className = "msg " + (failIdx < 0 ? "good" : "bad");
+  $("msg").textContent = failIdx < 0
+    ? "Perfect! Word for word. Try another part, or all three."
+    : `Wrong word. You got ${n} word${n === 1 ? "" : "s"} right. Study it, then press Reset.`;
+  render(failIdx, typedWord);
+  result.classList.add("show");
+  $("reset").focus();
+}
+
+function check() {
+  if (locked) return;
+  const raw = input.value;
+  const exp = expected();
+  const typed = split(raw);
+  const endsSpace = /\s$/.test(raw);
+  for (let i = 0; i < typed.length; i++) {
+    if (i >= exp.length) return finish(exp.length, typed[i]);
+    const isLast = i === typed.length - 1;
+    const t = norm(typed[i]), e = norm(exp[i]);
+    const complete = !isLast || endsSpace || (i === exp.length - 1 && t.length >= e.length);
+    if (complete && t !== e) return finish(i, typed[i]);
+  }
+  $("progress").style.width = Math.min(100, (typed.length / exp.length) * 100) + "%";
+  if (typed.length === exp.length && norm(typed[typed.length - 1]) === norm(exp[exp.length - 1])) finish(-1);
+}
+
+function reset() {
+  locked = false;
+  input.disabled = false;
+  input.value = "";
+  result.classList.remove("show");
+  $("progress").style.width = "0";
+  showStats();
+  input.focus();
+}
+
+input.addEventListener("input", check);
+$("reset").onclick = reset;
+$("giveup").onclick = () => {
+  if (locked) return;
+  const typed = split(input.value).length;
+  finish(Math.min(typed, expected().length - 1), "");
+  $("msg").textContent = "Here it is. Study it, then press Reset.";
+};
+
+buildTabs();
+showStats();
+</script>
+</body>
+</html>
