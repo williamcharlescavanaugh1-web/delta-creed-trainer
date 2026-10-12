@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Delta Creed Trainer</title>
+<title>Delta Trainer</title>
 <style>
   :root {
     --bg: #f6f3fa; --card: #ffffff; --text: #1d1530; --muted: #6b6280;
@@ -24,12 +24,13 @@
   .tabs button { flex: 1 1 auto; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border);
                  background: var(--card); color: var(--text); font: inherit; cursor: pointer; }
   .tabs button[aria-pressed="true"] { background: var(--purple); border-color: var(--purple); color: #fff; }
+  .tabs.main button { font-weight: 700; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
   .bar { height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; margin-bottom: 12px; }
   .bar > div { height: 100%; width: 0; background: var(--gold); transition: width .15s; }
   textarea { width: 100%; min-height: 200px; resize: vertical; padding: 12px; border-radius: 10px;
              border: 2px solid var(--border); background: var(--bg); color: var(--text); font: inherit; }
-  textarea:focus { outline: none; border-color: var(--purple); }
+  textarea:focus, .answer:focus { outline: none; border-color: var(--purple); }
   .row { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
   .row .grow { flex: 1; color: var(--muted); font-size: .9rem; }
   button.action { padding: 10px 18px; border-radius: 10px; border: 0; background: var(--purple); color: #fff;
@@ -44,73 +45,136 @@
   .w.err { color: #fff; background: var(--bad); border-radius: 4px; padding: 0 4px; font-weight: 700; }
   .w.rest { color: var(--muted); }
   .typed { font-size: .9rem; color: var(--muted); margin: -4px 0 12px; }
+  .hidden { display: none; }
+  .glyph { text-align: center; font-size: 5rem; line-height: 1.1; margin: 8px 0 16px; color: var(--purple); }
+  .answer { width: 100%; padding: 12px; font: inherit; font-size: 1.2rem; text-align: center; border-radius: 10px;
+            border: 2px solid var(--border); background: var(--bg); color: var(--text); }
+  .answer.right { border-color: var(--good); } .answer.wrong { border-color: var(--bad); }
 </style>
 </head>
 <body>
 <main>
-  <h1>Delta Creed Trainer <small>Made by Cavanaugh</small></h1>
-  <p class="sub">Type the creed from memory. One wrong word and it resets, so know it cold.</p>
+  <h1>Delta Trainer <small>Made by Cavanaugh</small></h1>
+  <p class="sub" id="sub"></p>
 
+  <div class="tabs main" id="sections"></div>
   <div class="tabs" id="tabs"></div>
 
   <div class="card">
-    <div class="bar"><div id="progress"></div></div>
-    <textarea id="input" placeholder="Start typing from memory…" autocomplete="off" autocorrect="off"
-              autocapitalize="off" spellcheck="false"></textarea>
-    <div class="row">
-      <span class="grow" id="stats"></span>
-      <button class="action ghost" id="giveup">Give up</button>
+    <!-- Recite: used by the creed and the Greek alphabet -->
+    <div id="recite">
+      <div class="bar"><div id="progress"></div></div>
+      <textarea id="input" placeholder="Start typing from memory…" autocomplete="off" autocorrect="off"
+                autocapitalize="off" spellcheck="false"></textarea>
+      <div class="row">
+        <span class="grow" id="stats"></span>
+        <button class="action ghost" id="giveup">Give up</button>
+      </div>
+      <div class="result" id="result" aria-live="polite">
+        <p class="msg" id="msg"></p>
+        <div class="creed" id="creed"></div>
+        <button class="action" id="reset">Reset</button>
+      </div>
     </div>
 
-    <div class="result" id="result" aria-live="polite">
-      <p class="msg" id="msg"></p>
-      <div class="creed" id="creed"></div>
-      <button class="action" id="reset">Reset</button>
+    <!-- Quiz: Greek letter shown, type its name -->
+    <div id="quiz" class="hidden">
+      <div class="glyph" id="glyph"></div>
+      <input class="answer" id="answer" placeholder="Type the letter's name" autocomplete="off"
+             autocorrect="off" autocapitalize="off" spellcheck="false">
+      <p class="msg" id="qmsg" aria-live="polite" style="text-align:center;margin:12px 0 0;min-height:1.6em"></p>
+      <div class="row">
+        <span class="grow" id="qstats"></span>
+        <button class="action" id="qnext">Check</button>
+      </div>
     </div>
   </div>
 </main>
 
 <script>
-const PARTS = [
+const CREED = [
   "I BELIEVE in Delta Tau Delta for the education of youth and the inspiration of maturity so that I may better learn and live the truth.",
   "I BELIEVE in Delta Tau Delta as a shrine of international brotherhood: her cornerstone friendship, her foundation conscience, her columns aspiration, her girders self-restraint, her doorway opportunity, her windows understanding, her buttresses loyalty, her strength the everlasting arms.",
   "I BELIEVE in Delta Tau Delta as an abiding influence to help me do my work, fulfill my obligations, maintain my self-respect, and bring about that happy life wherein I may more truly love my fellow men, serve my country, and obey my God."
 ];
-const LABELS = ["Part 1", "Part 2", "Part 3", "All three"];
+const GREEK = [
+  ["Α","α","Alpha"],["Β","β","Beta"],["Γ","γ","Gamma"],["Δ","δ","Delta"],["Ε","ε","Epsilon"],["Ζ","ζ","Zeta"],
+  ["Η","η","Eta"],["Θ","θ","Theta"],["Ι","ι","Iota"],["Κ","κ","Kappa"],["Λ","λ","Lambda"],["Μ","μ","Mu"],
+  ["Ν","ν","Nu"],["Ξ","ξ","Xi"],["Ο","ο","Omicron"],["Π","π","Pi"],["Ρ","ρ","Rho"],["Σ","σ","Sigma"],
+  ["Τ","τ","Tau"],["Υ","υ","Upsilon"],["Φ","φ","Phi"],["Χ","χ","Chi"],["Ψ","ψ","Psi"],["Ω","ω","Omega"]
+];
+const SECTIONS = {
+  creed: { label: "Creed", sub: "Type the creed from memory. One wrong word and it resets. A single typo in a word is forgiven.",
+           tabs: ["Part 1", "Part 2", "Part 3", "All three"] },
+  greek: { label: "Greek Alphabet", sub: "Know all 24 letters. A single typo in a name is forgiven.",
+           tabs: ["Recite", "Quiz"] }
+};
 
 const $ = id => document.getElementById(id);
 const input = $("input"), result = $("result");
-let mode = 0, locked = false, saved = {};
+let section = "creed", mode = 0, locked = false, saved = {};
 
 try { saved = JSON.parse(localStorage.getItem("creedStats") || "{}"); } catch (e) {}
 const save = () => { try { localStorage.setItem("creedStats", JSON.stringify(saved)); } catch (e) {} };
+const key = () => section === "creed" ? String(mode) : "g" + mode;
 
 const norm = w => w.toLowerCase().replace(/[’‘]/g, "'").replace(/[^a-z0-9']/g, "");
 const split = t => t.split(/\s+/).filter(w => norm(w));
-const paragraphs = () => mode === 3 ? PARTS : [PARTS[mode]];
-const expected = () => split(paragraphs().join(" "));
 
-function buildTabs() {
-  $("tabs").innerHTML = "";
-  LABELS.forEach((l, i) => {
-    const b = document.createElement("button");
-    b.textContent = l;
-    b.setAttribute("aria-pressed", i === mode);
-    b.onclick = () => { mode = i; buildTabs(); reset(); };
-    $("tabs").appendChild(b);
-  });
+// Words of 3+ letters may have one typo: a wrong, missing, extra or swapped letter.
+function near(a, b) {
+  if (a === b) return true;
+  if (b.length < 3 || Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  if (a.length === b.length) {
+    return a.slice(i + 1) === b.slice(i + 1) ||
+           (a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2));
+  }
+  const [s, l] = a.length < b.length ? [a, b] : [b, a];
+  return s.slice(i) === l.slice(i + 1);
 }
 
+const paragraphs = () => section === "greek" ? [GREEK.map(g => g[2]).join(" ")]
+  : mode === 3 ? CREED : [CREED[mode]];
+const expected = () => split(paragraphs().join(" "));
+
+function buildNav() {
+  const mk = (el, labels, current, onpick) => {
+    el.innerHTML = "";
+    labels.forEach((l, i) => {
+      const b = document.createElement("button");
+      b.textContent = l;
+      b.setAttribute("aria-pressed", i === current);
+      b.onclick = () => onpick(i);
+      el.appendChild(b);
+    });
+  };
+  const keys = Object.keys(SECTIONS);
+  mk($("sections"), keys.map(k => SECTIONS[k].label), keys.indexOf(section),
+     i => { section = keys[i]; mode = 0; buildNav(); switchView(); });
+  mk($("tabs"), SECTIONS[section].tabs, mode, i => { mode = i; buildNav(); switchView(); });
+  $("sub").textContent = SECTIONS[section].sub;
+}
+
+function switchView() {
+  const isQuiz = section === "greek" && mode === 1;
+  $("recite").classList.toggle("hidden", isQuiz);
+  $("quiz").classList.toggle("hidden", !isQuiz);
+  if (isQuiz) startQuiz(); else reset();
+}
+
+/* ---------- Recite (creed + alphabet) ---------- */
 function showStats() {
-  const s = saved[mode] || { best: 0, done: 0 };
+  const s = saved[key()] || { best: 0, done: 0 };
   $("stats").textContent = `Best: ${s.best}/${expected().length} words · Perfect runs: ${s.done}`;
 }
 
 function record(count, done) {
-  const s = saved[mode] || { best: 0, done: 0 };
+  const s = saved[key()] || { best: 0, done: 0 };
   s.best = Math.max(s.best, count);
   if (done) s.done++;
-  saved[mode] = s; save(); showStats();
+  saved[key()] = s; save(); showStats();
 }
 
 function render(failIdx, typedWord) {
@@ -143,7 +207,7 @@ function finish(failIdx, typedWord) {
   record(n, failIdx < 0);
   $("msg").className = "msg " + (failIdx < 0 ? "good" : "bad");
   $("msg").textContent = failIdx < 0
-    ? "Perfect! Word for word. Try another part, or all three."
+    ? "Perfect! Word for word."
     : `Wrong word. You got ${n} word${n === 1 ? "" : "s"} right. Study it, then press Reset.`;
   render(failIdx, typedWord);
   result.classList.add("show");
@@ -160,11 +224,12 @@ function check() {
     if (i >= exp.length) return finish(exp.length, typed[i]);
     const isLast = i === typed.length - 1;
     const t = norm(typed[i]), e = norm(exp[i]);
+    const ok = near(t, e);
     const complete = !isLast || endsSpace || (i === exp.length - 1 && t.length >= e.length);
-    if (complete && t !== e) return finish(i, typed[i]);
+    if (complete && !ok) return finish(i, typed[i]);
   }
   $("progress").style.width = Math.min(100, (typed.length / exp.length) * 100) + "%";
-  if (typed.length === exp.length && norm(typed[typed.length - 1]) === norm(exp[exp.length - 1])) finish(-1);
+  if (typed.length === exp.length && near(norm(typed[typed.length - 1]), norm(exp[exp.length - 1]))) finish(-1);
 }
 
 function reset() {
@@ -186,8 +251,64 @@ $("giveup").onclick = () => {
   $("msg").textContent = "Here it is. Study it, then press Reset.";
 };
 
-buildTabs();
-showStats();
+/* ---------- Quiz (symbol -> name) ---------- */
+let cur = -1, streak = 0, answered = false;
+
+function qStats() {
+  const s = saved.gq || { best: 0 };
+  $("qstats").textContent = `Streak: ${streak} · Best streak: ${s.best}`;
+}
+
+function startQuiz() {
+  streak = 0;
+  nextLetter();
+}
+
+function nextLetter() {
+  let n;
+  do { n = Math.floor(Math.random() * GREEK.length); } while (n === cur);
+  cur = n;
+  answered = false;
+  $("glyph").textContent = GREEK[cur][0] + " " + GREEK[cur][1];
+  $("answer").value = "";
+  $("answer").disabled = false;
+  $("answer").className = "answer";
+  $("qmsg").textContent = "";
+  $("qnext").textContent = "Check";
+  qStats();
+  $("answer").focus();
+}
+
+function submitQuiz() {
+  if (answered) return nextLetter();
+  const guess = norm($("answer").value);
+  if (!guess) return;
+  const name = GREEK[cur][2];
+  answered = true;
+  $("answer").disabled = true;
+  if (near(guess, norm(name))) {
+    streak++;
+    const s = saved.gq || { best: 0 };
+    if (streak > s.best) { s.best = streak; saved.gq = s; save(); }
+    $("answer").className = "answer right";
+    $("qmsg").className = "msg good";
+    $("qmsg").textContent = "Correct! " + name;
+  } else {
+    streak = 0;
+    $("answer").className = "answer wrong";
+    $("qmsg").className = "msg bad";
+    $("qmsg").textContent = `Not quite. It's ${name}.`;
+  }
+  $("qnext").textContent = "Next";
+  qStats();
+  $("qnext").focus();
+}
+
+$("qnext").onclick = submitQuiz;
+$("answer").addEventListener("keydown", e => { if (e.key === "Enter") submitQuiz(); });
+
+buildNav();
+switchView();
 </script>
 </body>
 </html>
